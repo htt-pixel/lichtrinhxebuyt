@@ -35,3 +35,12 @@ Chỉ dùng khoá `anon`. Tuyệt đối không đưa khoá `service_role` vào 
 - Đăng ký công khai chỉ tạo vai trò **khách hàng** hoặc **tài xế**. Quyền admin và việc gán xe cho tài xế chỉ admin làm được (tab "Người dùng" trong trang quản trị).
 - Để đăng ký không cần xác nhận email khi thử nghiệm: Authentication → Providers → Email → tắt "Confirm email". Khi chạy thật nên bật lại.
 - Thêm domain GitHub Pages vào Authentication → URL Configuration → Site URL để link xác nhận email trỏ đúng.
+
+## Dữ liệu 25 tuyến, giá vé, đặt chỗ (v3)
+Chạy lần lượt trong SQL Editor: `schema.sql` → `schema_v2.sql` → `schema_v3.sql` → `seed_1_routes_stops_buses.sql` → `seed_2_trips_a.sql` → `seed_3_trips_b.sql`.
+- `seed_1` **xoá toàn bộ** tuyến, điểm dừng, xe, chuyến và đặt chỗ cũ trước khi nạp dữ liệu mẫu.
+- 20 tuyến dừng cố định (giá 6.000–7.000 đ/lượt) và 5 tuyến **xe đón dọc đường** (DD1–DD5): giá = 8.000 đ + 1.500 đ/km, làm tròn 500 đ, tính từ điểm đón (chọn trên bản đồ) đến điểm trả.
+- Giờ tới từng điểm dừng tính từ cột `offset_min`. Độ trễ (`delay_min`) cao hơn ở giờ cao điểm 6:30–8:30 và 16:30–18:30. Tài xế và admin cập nhật độ trễ thực tế.
+- Địa danh là thật nhưng tọa độ xấp xỉ, trạm trung gian (tên "Trạm 05-03") nội suy theo đường thẳng, giá và lịch chạy là mẫu. Cần thay bằng dữ liệu chính thức khi vận hành.
+- Giá vé và kiểm tra chỗ trống được tính ở server (trigger), người dùng không sửa được. Chưa tích hợp cổng thanh toán: chuyển khoản/ví điện tử chỉ ghi nhận hình thức, admin đánh dấu "Đã thanh toán".
+- Muốn sinh lại dữ liệu: `python3 generate_seed.py`.
