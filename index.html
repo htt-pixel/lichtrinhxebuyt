@@ -37,7 +37,7 @@ input[type=search],input[type=text],input[type=number],input[type=time],input[ty
 .seg{display:flex;gap:6px;margin:10px 0}
 .seg button{flex:1;border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px;cursor:pointer}
 .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-.rlist{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.rlist{display:flex;flex-direction:column;gap:6px;max-height:68vh;overflow:auto}
 .ritem{display:grid;grid-template-columns:44px 1fr;gap:10px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px;cursor:pointer}
 .ritem.on{border-color:var(--accent);background:#f0faf5}
 .ritem b.code{background:var(--board);color:#fff;border-radius:6px;text-align:center;align-self:start;padding:2px 0}
@@ -101,6 +101,7 @@ ol.stops small{margin-left:6px}
         <h3>Tra cứu tuyến</h3>
         <input type="search" id="q" placeholder="Số tuyến hoặc tên điểm dừng" aria-label="Tìm tuyến">
         <div class="seg" id="dir"><button data-d="" class="on">Tất cả</button><button data-d="di">Lượt đi</button><button data-d="ve">Lượt về</button></div>
+        <div class="seg" id="typ" style="margin-top:0"><button data-t="" class="on">Mọi loại xe</button><button data-t="fixed">Dừng cố định</button><button data-t="flag_down">Đón dọc đường</button></div>
         <div class="rlist" id="rlist"></div>
       </section>
       <section class="panel" id="detail"></section>
@@ -133,7 +134,7 @@ const STATUS = { scheduled: 'Đúng giờ', delayed: 'Trễ', cancelled: 'Huỷ'
 
 const ok = !SUPABASE_URL.includes('YOUR-');
 const sb = ok ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const S = { routes: [], stops: [], trips: [], buses: [], profiles: [], bookings: [], me: null, sel: null, dir: '', q: '', tab: 'routes', user: null };
+const S = { routes: [], stops: [], trips: [], buses: [], profiles: [], bookings: [], me: null, sel: null, dir: '', type: '', q: '', tab: 'routes', user: null };
 const isAdmin = () => S.user?.app_metadata?.role === 'admin';
 
 function toast(msg, err) {
@@ -197,13 +198,14 @@ function renderBoard() {
 }
 function routeMatch(r) {
   const q = norm(S.q);
+  if (S.type && r.service_type !== S.type) return false;
   if (S.dir && !S.trips.some(t => t.route_id === r.id && t.direction === S.dir)) return false;
   if (!q) return true;
   return norm(r.code).includes(q) || norm(r.name).includes(q) || S.stops.some(s => s.route_id === r.id && norm(s.name).includes(q));
 }
 function renderList() {
   const rs = S.routes.filter(r => r.active && routeMatch(r));
-  $('#rlist').innerHTML = rs.length ? rs.map(r => `<button class="ritem ${r.id === S.sel ? 'on' : ''}" data-id="${r.id}">
+  $('#rlist').innerHTML = rs.length ? `<p class="muted" style="font-size:13px">${rs.length} tuyến</p>` + rs.map(r => `<button class="ritem ${r.id === S.sel ? 'on' : ''}" data-id="${r.id}">
     <b class="code">${esc(r.code)}</b><span>${esc(r.start_point)} – ${esc(r.end_point)}<small>${isFlag(r) ? 'Đón dọc đường · ' : ''}${fareText(r)} · mỗi ${r.interval_min} phút</small></span></button>`).join('')
     : '<p class="muted">Không tìm thấy tuyến phù hợp. Thử số tuyến hoặc tên một điểm dừng khác.</p>';
 }
@@ -232,15 +234,19 @@ function renderDetail() {
 /* ---------- Đặt chỗ ---------- */
 function openBook() {
   const r = S.routes.find(x => x.id === S.sel); if (!r) return;
-  if (!S.user) { toast('Vui lòng đăng nhập để đặt chỗ.', true); return openLogin(false); }
   const n = nowMin(), flag = isFlag(r), st = stopsOf(r.id), tot = st.length ? st[st.length - 1].offset_min : 0, d = $('#dlg');
   let ts = S.trips.filter(t => t.route_id === r.id && t.status !== 'cancelled' && t.status !== 'done').sort((a, b) => eff(a) - eff(b));
   const up = ts.filter(t => eff(t) >= n); if (up.length) ts = up;
   ts = ts.slice(0, 60);
   if (!ts.length || st.length < 2) return toast('Tuyến này chưa có chuyến hoặc điểm dừng để đặt.', true);
   const so = st.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const gs = guestSaved();
   d.innerHTML = `<form id="bf"><h3>Đăng ký đi tuyến ${esc(r.code)}</h3>
     <p class="muted" style="margin-bottom:10px">${esc(r.name)} · ${fareText(r)}</p>
+    ${S.user ? `<p class="muted" style="margin-bottom:8px">Đặt chỗ bằng tài khoản ${esc(S.me?.full_name || S.user.email)}.</p>` : `<div class="f"><label>Họ và tên</label><input type="text" name="gname" required maxlength="80" value="${esc(gs.name)}" autocomplete="name"></div>
+    <div class="f"><label>Số điện thoại</label><input type="text" name="gphone" required inputmode="tel" value="${esc(gs.phone)}" placeholder="0901234567" autocomplete="tel"></div>
+    <div class="f chk"><label><input type="checkbox" name="remember" checked>Nhớ thông tin trên thiết bị này</label></div>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Không cần tài khoản hay email. Bạn nhận một mã đặt chỗ để tra cứu bằng số điện thoại.</p>`}
     <div class="f"><label>Chuyến và xe</label><select name="trip" required>${ts.map(t => `<option value="${t.id}">${t5(t.departure)}${t.delay_min >= 3 ? ' (trễ ' + t.delay_min + ' phút)' : ''} · ${DIR[t.direction]} · xe ${esc(plateOf(t.bus_id))}</option>`).join('')}</select></div>
     ${flag ? `<div class="f"><label>Điểm đón: bấm bản đồ hoặc dùng vị trí của bạn</label>
       <input type="text" name="plat" readonly required placeholder="Vĩ độ"><input type="text" name="plng" readonly required placeholder="Kinh độ" style="margin-top:4px">
@@ -278,9 +284,60 @@ function openBook() {
     e.preventDefault(); const c = calc(); if (!c.fare) return toast(c.msg, true);
     const f = new FormData(e.target), row = { trip_id: +f.get('trip'), alight_stop_id: +f.get('to'), seats: +f.get('seats'), pay_method: f.get('pay'), note: f.get('note').trim() || null };
     if (flag) { row.pickup_lat = parseFloat(f.get('plat')); row.pickup_lng = parseFloat(f.get('plng')); } else row.board_stop_id = +f.get('from');
+    if (!S.user) {
+      row.guest_name = f.get('gname').trim(); row.guest_phone = f.get('gphone').trim(); row.code = newCode();
+      if (row.guest_name.length < 2) return toast('Vui lòng nhập họ tên.', true);
+      if (!PHONE.test(row.guest_phone)) return toast('Số điện thoại không hợp lệ (8–15 chữ số).', true);
+    }
     const { error } = await sb.from('bookings').insert(row);
     if (error) return toast('Đặt chỗ thất bại: ' + error.message, true);
-    d.close(); toast('Đặt chỗ thành công. Số tiền: ' + money(c.fare)); location.hash = '#me'; load();
+    if (S.user) { d.close(); toast('Đặt chỗ thành công. Số tiền: ' + money(c.fare)); location.hash = '#me'; return load(); }
+    saveGuest(row, f.has('remember')); showTicket(row, c.fare); load();
+  };
+}
+
+/* ---------- Khách vãng lai: lưu thông tin trên thiết bị, vé, tra cứu ---------- */
+const LS = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+const guestSaved = () => LS.get('bl_guest') || { name: '', phone: '' };
+const saveGuest = (row, rem) => { rem ? LS.set('bl_guest', { name: row.guest_name, phone: row.guest_phone }) : LS.del('bl_guest'); LS.set('bl_last', { code: row.code, phone: row.guest_phone }); };
+const newCode = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', u = crypto.getRandomValues(new Uint8Array(8)); return [...u].map(x => a[x % 32]).join(''); };
+function ticketHtml(o) {
+  const line = (l, v) => `<p style="margin:3px 0"><span class="muted">${l}:</span> ${v}</p>`;
+  return `<h3>Mã đặt chỗ: <span style="letter-spacing:.12em">${esc(o.code)}</span></h3>` + line('Khách', esc(o.guest_name || '')) +
+    line('Tuyến', `${esc(o.route_code)} · ${esc(o.route_name)}`) +
+    line('Chuyến', `${t5(o.departure)} · ${DIR[o.direction]}${o.delay_min >= 3 ? ' · trễ ' + o.delay_min + ' phút' : ''}`) +
+    line('Xe', esc(o.plate || 'chưa gán xe')) + line('Xuống tại', esc(o.alight_name)) + line('Số ghế', o.seats) +
+    line('Số tiền', `<b>${money(o.fare)}</b> (${PM[o.pay_method]} · ${PAY[o.pay_status]})`);
+}
+function showTicket(row, fare) {
+  const t = S.trips.find(x => x.id === row.trip_id), r = S.routes.find(x => x.id === t.route_id), al = S.stops.find(s => s.id === row.alight_stop_id), d = $('#dlg');
+  d.innerHTML = ticketHtml({ ...row, route_code: r.code, route_name: r.name, departure: t.departure, direction: t.direction, delay_min: t.delay_min,
+    plate: S.buses.find(b => b.id === t.bus_id)?.plate, alight_name: al.name, fare, pay_status: 'unpaid' }) +
+    `<p class="muted" style="font-size:13px;margin:10px 0">Hãy chụp màn hình hoặc ghi lại mã này. Dùng nút “Tra cứu vé” với mã và số điện thoại để xem hoặc huỷ vé. Quản trị viên sẽ xác nhận thanh toán.</p>
+    <div class="acts"><button class="btn pri" id="cancel">Đóng</button></div>`;
+  if (!d.open) d.showModal(); $('#cancel').onclick = () => d.close();
+}
+function openLookup() {
+  const d = $('#dlg'), last = LS.get('bl_last') || { code: '', phone: '' };
+  d.innerHTML = `<form id="lk"><h3>Tra cứu vé</h3>
+    <div class="f"><label>Mã đặt chỗ</label><input type="text" name="code" required maxlength="8" value="${esc(last.code)}" style="text-transform:uppercase"></div>
+    <div class="f"><label>Số điện thoại đã đặt</label><input type="text" name="phone" required inputmode="tel" value="${esc(last.phone)}"></div>
+    <div id="lkres"></div>
+    <div class="acts"><button type="button" class="btn" id="cancel">Đóng</button><button class="btn pri">Tra cứu</button></div></form>`;
+  if (!d.open) d.showModal(); $('#cancel').onclick = () => d.close();
+  $('#lk').onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(e.target), code = f.get('code').trim().toUpperCase(), phone = f.get('phone').trim();
+    const { data, error } = await sb.rpc('lookup_booking', { p_code: code, p_phone: phone });
+    if (error) return toast('Không tra cứu được: ' + error.message, true);
+    const o = data?.[0];
+    if (!o) { $('#lkres').innerHTML = '<p class="muted" style="margin:8px 0">Không tìm thấy vé khớp mã và số điện thoại này.</p>'; return; }
+    $('#lkres').innerHTML = `<div style="margin:10px 0;padding:10px;background:var(--bg);border-radius:8px">${ticketHtml(o)}${o.pay_status === 'unpaid' ? '<button type="button" class="btn sm del" id="cx" style="margin-top:8px">Huỷ vé này</button>' : ''}</div>`;
+    const cx = $('#cx');
+    if (cx) cx.onclick = async () => {
+      const r = await sb.rpc('cancel_booking', { p_code: code, p_phone: phone });
+      if (r.error || !r.data) return toast('Không huỷ được vé này.', true);
+      toast('Đã huỷ vé.'); $('#lkres').innerHTML = ''; load();
+    };
   };
 }
 
@@ -308,6 +365,7 @@ const CFG = {
     { k: 'role', l: 'Vai trò', t: 'select', list: { customer: 'Khách hàng', driver: 'Tài xế' } },
     { k: 'bus_id', l: 'Xe được gán', t: 'select', src: 'buses', show: 'plate', opt: 1 }] },
   bookings: { label: 'Đặt chỗ', f: [
+    { k: 'code', l: 'Mã', t: 'text', ro: 1 }, { k: 'guest_name', l: 'Khách', t: 'text', ro: 1 }, { k: 'guest_phone', l: 'SĐT', t: 'text', ro: 1 },
     { k: 'trip_id', l: 'Chuyến', t: 'select', src: 'trips', show: 'departure', ro: 1 }, { k: 'seats', l: 'Ghế', t: 'number', ro: 1 },
     { k: 'fare', l: 'Số tiền (đ)', t: 'number', ro: 1 }, { k: 'pay_method', l: 'Hình thức', t: 'select', list: PM, ro: 1 },
     { k: 'pay_status', l: 'Thanh toán', t: 'select', list: PAY }] },
@@ -390,9 +448,9 @@ async function move(id, dlt) {
 /* ---------- Đăng nhập ---------- */
 function renderAuth() {
   const h = location.hash, admin = isAdmin();
-  $('#auth').innerHTML = S.user
+  $('#auth').innerHTML = '<button class="btn" id="lookup">Tra cứu vé</button> ' + (S.user
     ? `<span class="muted" style="margin-right:8px">${esc(S.me?.full_name || S.user.email)}</span><button class="btn" data-go="#me">Tài khoản</button> ${admin ? '<button class="btn" data-go="#admin">Quản trị</button> ' : ''}<button class="btn" id="out">Đăng xuất</button>`
-    : '<button class="btn" id="in">Đăng nhập / Đăng ký</button>';
+    : '<button class="btn" id="in">Đăng nhập / Đăng ký</button>');
   const v = !S.user ? 'pub' : h === '#admin' && admin ? 'adm' : h === '#me' ? 'me' : 'pub';
   $('#pub').hidden = v !== 'pub'; $('#adm').hidden = v !== 'adm'; $('#me').hidden = v !== 'me';
 }
@@ -534,6 +592,7 @@ function render() {
 }
 $('#q').oninput = e => { S.q = e.target.value; renderList(); };
 $('#dir').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.dir = b.dataset.d; [...$('#dir').children].forEach(x => x.classList.toggle('on', x === b)); renderList(); renderDetail(); };
+$('#typ').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.type = b.dataset.t; [...$('#typ').children].forEach(x => x.classList.toggle('on', x === b)); renderList(); };
 $('#rlist').onclick = e => { const b = e.target.closest('.ritem'); if (b) { S.sel = +b.dataset.id; renderList(); renderDetail(); } };
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.t; renderAdmin(); } };
 $('#addBtn').onclick = () => openForm(null);
@@ -546,6 +605,7 @@ $('#atable').onclick = e => {
 };
 $('#auth').onclick = async e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'lookup') return ok ? openLookup() : toast('Chưa cấu hình Supabase.', true);
   if (b.dataset.go) location.hash = b.dataset.go;
   if (b.id === 'in') ok ? openLogin(false) : toast('Chưa cấu hình Supabase.', true);
   if (b.id === 'out') { await sb.auth.signOut(); location.hash = ''; }

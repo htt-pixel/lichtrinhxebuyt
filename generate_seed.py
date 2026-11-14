@@ -17,7 +17,9 @@ L = {  # địa danh: (tên, vĩ độ, kinh độ)
  'ST':('Khu du lịch Suối Tiên',10.8661,106.8030),'DHQG':('ĐH Quốc gia TP.HCM',10.8750,106.8010),'BXMDm':('Bến xe Miền Đông mới',10.8781,106.8134),
  'SHTP':('Khu Công nghệ cao',10.8520,106.8090),'BXAS':('Bến xe An Sương',10.8416,106.6139),'QTSC':('Công viên phần mềm Quang Trung',10.8540,106.6270),
  'HM':('Chợ Hóc Môn',10.8860,106.5920),'CC':('Bến xe Củ Chi',10.9730,106.4930),'AEON':('AEON Tân Phú',10.8026,106.6176),
- 'BCH':('Chợ Bình Chánh',10.6676,106.5736),'NB':('Chợ Nhà Bè',10.6950,106.7370),'PMH':('Phú Mỹ Hưng',10.7290,106.7220),'KT':('Cầu Kênh Tẻ',10.7580,106.7070)}
+ 'BCH':('Chợ Bình Chánh',10.6676,106.5736),'NB':('Chợ Nhà Bè',10.6950,106.7370),'PMH':('Phú Mỹ Hưng',10.7290,106.7220),'KT':('Cầu Kênh Tẻ',10.7580,106.7070),
+ 'GSG':('Ga Sài Gòn',10.7830,106.6770),'SVD':('Sân vận động Thống Nhất',10.7619,106.6628),'VHM':('Vạn Hạnh Mall',10.7704,106.6702),
+ 'LOTTE':('Lotte Mart Quận 7',10.7410,106.7010),'BDI':('Chợ Bình Điền',10.6930,106.6000)}
 
 R = [('01','BT,HV,VL,CRAY,BXCL',12),('02','BT,HV,VL,BXCL,PL,BXMT',12),('03','BT,CV23,BK,LTR,DS',15),
  ('04','BT,HCR,LTR,BH,TSN',15),('05','BXCL,PL,BXMT,BCH',20),('06','BXQ8,HV,BT',15),('07','BT,CV23,TCV,L81,TD',15),
@@ -25,7 +27,13 @@ R = [('01','BT,HV,VL,CRAY,BXCL',12),('02','BT,HV,VL,BXCL,PL,BXMT',12),('03','BT,
  ('12','BT,HCR,HX,BTR,CTDc,ST',10),('13','BXMD,BTR,CTDc,ST,DHQG',12),('14','BXMD,BC,PN,LTR,BXCL,BXMT',15),
  ('15','BXAS,AEON,BH,LTR,BT',15),('16','BXAS,QTSC,HM',20),('17','NSGV,GD,PN,HCR,BT',12),
  ('18','BXCL,CRAY,LTR,PN,BC,BXMD,BTR,CTDc,ST,DHQG',20),('19','BT,HCR,HX,BTR,CTDc,ST,DHQG',15),('20','BXMDm,SHTP,ST,DHQG',25),
- ('DD1','BT,LTR,BXAS,QTSC,HM,CC',30),('DD2','BXMT,BCH',30),('DD3','HM,CC',30),('DD4','BT,KT,PMH,NB',25),('DD5','CTDc,ST,DHQG',25)]
+ ('DD1','BT,LTR,BXAS,QTSC,HM,CC',30),('DD2','BXMT,BCH',30),('DD3','HM,CC',30),('DD4','BT,KT,PMH,NB',25),('DD5','CTDc,ST,DHQG',25),
+ ('21','BT,HCR,GSG,BH,TSN',15),('22','BXQ8,LOTTE,KT,BT',15),('23','BT,LOTTE,PMH',15),('24','BT,VHM,SVD,CRAY,BXCL',12),
+ ('25','BXMT,PL,DS,BK,BT',15),('26','BXCL,SVD,VHM,HCR,CTD',15),('27','TSN,BH,PN,BC,HX',15),('28','AEON,BXAS,QTSC,HM',20),
+ ('29','BXAS,NSGV,GD,PN,HCR',15),('30','NSGV,GD,BC,HX,L81,TD',15),('31','BXMD,HX,L81,TD',15),('32','TD,L81,CTD,HCR,BT',15),
+ ('33','BTR,BXMD,BC,GD',20),('34','BXMDm,SHTP,CTDc,BTR,BXMD',20),('35','ST,CTDc,BTR,HX,BT',12),('36','DHQG,ST,CTDc,BTR,BC,HCR,BT',15),
+ ('37','BCH,BDI,BXMT,BXCL',20),('38','NB,PMH,LOTTE,KT,BT',20),('39','PMH,LOTTE,BXQ8,BXMT',25),('40','HM,BXAS,AEON,BH,LTR,BT',20),
+ ('DD6','BCH,BDI,BXMT',30),('DD7','HM,QTSC,BXAS',30),('DD8','NB,PMH,LOTTE,BXQ8',30),('DD9','BXAS,NSGV,GD,PN',30),('DD10','CC,HM,QTSC,BXAS',30)]
 
 def hav(a, b):
     p = math.pi / 180; dl = (b[0]-a[0])*p; dn = (b[1]-a[1])*p
@@ -88,11 +96,11 @@ with open('seed_1_routes_stops_buses.sql', 'w', encoding='utf-8') as f:
     f.write("insert into public.stops (route_id,seq,name,lat,lng,offset_min)\nselect r.id,v.seq,v.name,v.lat,v.lng,v.off from (values\n" + ",\n".join(stops) + "\n) v(code,seq,name,lat,lng,off) join public.routes r on r.code=v.code;\n")
     f.write("insert into public.buses (plate,capacity) values\n" + ",\n".join(buses) + ";\n")
 
-total = sum(len(v) for v in trips.values()); half = 0; parts = ([], [])
+total = sum(len(v) for v in trips.values()); acc = 0; parts = [[], [], [], []]
 for code, rows in trips.items():
-    (parts[0] if half < total/2 else parts[1]).extend(rows); half += len(rows)
+    parts[min(3, int(acc / total * 4))].extend(rows); acc += len(rows)
 for i, rows in enumerate(parts):
-    with open(f'seed_{i+2}_trips_{"ab"[i]}.sql', 'w', encoding='utf-8') as f:
+    with open(f'seed_{i+2}_trips_{"abcd"[i]}.sql', 'w', encoding='utf-8') as f:
         f.write("insert into public.trips (route_id,bus_id,departure,direction,delay_min,status)\n"
                 "select r.id,b.id,v.dep::time,v.dir,v.dl,case when v.dl>=5 then 'delayed' else 'scheduled' end\nfrom (values\n"
                 + ",\n".join(rows) + "\n) v(code,plate,dep,dir,dl) join public.routes r on r.code=v.code join public.buses b on b.plate=v.plate;\n")

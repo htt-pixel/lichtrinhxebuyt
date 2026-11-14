@@ -44,3 +44,10 @@ Chạy lần lượt trong SQL Editor: `schema.sql` → `schema_v2.sql` → `sch
 - Địa danh là thật nhưng tọa độ xấp xỉ, trạm trung gian (tên "Trạm 05-03") nội suy theo đường thẳng, giá và lịch chạy là mẫu. Cần thay bằng dữ liệu chính thức khi vận hành.
 - Giá vé và kiểm tra chỗ trống được tính ở server (trigger), người dùng không sửa được. Chưa tích hợp cổng thanh toán: chuyển khoản/ví điện tử chỉ ghi nhận hình thức, admin đánh dấu "Đã thanh toán".
 - Muốn sinh lại dữ liệu: `python3 generate_seed.py`.
+
+## Đặt chỗ không cần tài khoản/email (v4) và 50 tuyến
+Thứ tự chạy mới: `schema.sql` → `schema_v2.sql` → `schema_v3.sql` → `schema_v4.sql` → `seed_1_routes_stops_buses.sql` → `seed_2_trips_a.sql` → `seed_3_trips_b.sql` → `seed_4_trips_c.sql` → `seed_5_trips_d.sql` (thay cho thứ tự ở mục v3).
+- Khách không đăng nhập nhập họ tên + số điện thoại, nhận **mã đặt chỗ 8 ký tự**. Nút "Tra cứu vé" cho xem hoặc huỷ vé bằng mã + số điện thoại. Họ tên và số điện thoại được nhớ trên thiết bị (localStorage) nếu khách chọn.
+- Khách vãng lai chỉ **thêm** được đặt chỗ, không đọc được bảng. Thông tin cá nhân chỉ admin xem (tab "Đặt chỗ"). Mỗi số điện thoại giới hạn 5 vé chưa thanh toán trong 24 giờ.
+- Khi mở công khai nên bật CAPTCHA (Supabase: Authentication → Attack Protection) hoặc đặt rate limit ở tầng ngoài, vì ai cũng gửi được đặt chỗ ảo.
+- Dữ liệu mẫu giờ có 50 tuyến (40 dừng cố định, 10 xe đón dọc đường). Danh sách tuyến có bộ lọc loại xe và đếm số tuyến.
