@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root{--ink:#10232b;--bg:#eef1f2;--board:#0d3a40;--amber:#ffc72c;--line:#d5dcdf;--accent:#1b8a5a;--warn:#e8a317;--danger:#c8403a;--card:#fff}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -68,6 +69,10 @@ dialog h3{margin-bottom:12px}
 #toast div.err{background:var(--danger)}
 .load{opacity:.5;pointer-events:none}
 .warn{background:#fdf3d8;border:1px solid var(--warn);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+#map{height:340px;border-radius:10px;margin-top:14px;z-index:0;background:#dde3e5}
+#pick{height:220px;border-radius:8px;z-index:0;margin-bottom:6px}
+.pin{width:24px;height:24px;border-radius:50%;background:var(--amber);color:var(--ink);font:700 12px/1 "Be Vietnam Pro",sans-serif;display:grid;place-items:center;border:2px solid var(--board)}
+.brand{cursor:pointer}
 @media(max-width:820px){
  header{padding:12px 16px}.grid{grid-template-columns:1fr}.rlist{max-height:none}
  .brow{grid-template-columns:64px 44px 1fr}.bwait{grid-column:2/4}
@@ -102,26 +107,29 @@ dialog h3{margin-bottom:12px}
     <div class="tabs" id="tabs"></div>
     <section class="panel"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><h3 id="atitle"></h3><button class="btn pri" id="addBtn">Thêm mới</button></div><div class="scroll" id="atable"></div></section>
   </div>
+<div id="me" hidden></div>
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const SUPABASE_URL = 'https://mrupcaiwswcpdmsvwsdr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ydXBjYWl3c3djcGRtc3Z3c2RyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwNTMyNDIsImV4cCI6MjEwOTYyOTI0Mn0.NHYqiE4MNzfAGMvhRk1FmST7k9cjtuaqx19pS5sNoUs';
+const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t5 = v => v ? String(v).slice(0, 5) : '';
 const toMin = t => { const [h, m] = t5(t).split(':'); return +h * 60 + +m; };
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+const PHONE = /^\+?[0-9 ]{8,15}$/;
 const DIR = { di: 'Lượt đi', ve: 'Lượt về' };
 const STATUS = { scheduled: 'Đúng giờ', delayed: 'Trễ', cancelled: 'Huỷ', done: 'Đã chạy' };
 
 const ok = !SUPABASE_URL.includes('YOUR-');
 const sb = ok ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const S = { routes: [], stops: [], trips: [], buses: [], sel: null, dir: '', q: '', tab: 'routes', user: null };
+const S = { routes: [], stops: [], trips: [], buses: [], profiles: [], me: null, sel: null, dir: '', q: '', tab: 'routes', user: null };
 const isAdmin = () => S.user?.app_metadata?.role === 'admin';
 
 function toast(msg, err) {
@@ -140,14 +148,17 @@ async function load() {
   if (!ok) { $('#cfgWarn').hidden = false; render(); return; }
   document.body.classList.add('load');
   try {
-    const [r, s, t, b] = await Promise.all([
+    const u = S.user;
+    const [r, s, t, b, pr, me] = await Promise.all([
       sb.from('routes').select('*').order('code'),
       sb.from('stops').select('*').order('seq'),
       sb.from('trips').select('*').order('departure'),
-      sb.from('buses').select('*').order('plate')
+      sb.from('buses').select('*').order('plate'),
+      u && isAdmin() ? sb.from('profiles').select('*').order('full_name') : { data: [] },
+      u ? sb.from('profiles').select('*').eq('id', u.id).maybeSingle() : { data: null }
     ]);
-    for (const x of [r, s, t, b]) if (x.error) throw x.error;
-    Object.assign(S, { routes: r.data, stops: s.data, trips: t.data, buses: b.data });
+    for (const x of [r, s, t, b, pr, me]) if (x.error) throw x.error;
+    Object.assign(S, { routes: r.data, stops: s.data, trips: t.data, buses: b.data, profiles: pr.data, me: me.data });
     if (!S.sel || !S.routes.find(x => x.id === S.sel)) S.sel = S.routes[0]?.id ?? null;
   } catch (e) { toast('Không tải được dữ liệu: ' + (e.message || e), true); }
   document.body.classList.remove('load');
@@ -195,10 +206,12 @@ function renderDetail() {
   const st = S.stops.filter(s => s.route_id === r.id).sort((a, b) => a.seq - b.seq);
   el.innerHTML = `<h3>Tuyến ${esc(r.code)}: ${esc(r.name)}</h3>
     <p class="muted">Chuyến đầu ${t5(r.first_trip)} · chuyến cuối ${t5(r.last_trip)} · giãn cách ${r.interval_min} phút</p>
+    <div id="map"></div>
     <h3 style="margin-top:18px">Điểm dừng</h3>
-    ${st.length ? '<ol class="stops">' + st.map(s => `<li>${esc(s.name)}</li>`).join('') + '</ol>' : '<p class="muted">Chưa có điểm dừng.</p>'}
+    ${st.length ? '<ol class="stops">' + st.map(s => `<li data-sid="${s.id}" style="cursor:pointer">${esc(s.name)}</li>`).join('') + '</ol>' : '<p class="muted">Chưa có điểm dừng.</p>'}
     ${dirs.map(block).join('')}
     <p class="muted" style="margin-top:12px;font-size:13px">Ô vàng là chuyến tiếp theo. Gạch ngang: chuyến bị huỷ. Nền cam: chuyến trễ.</p>`;
+  drawMap(st);
 }
 
 /* ---------- Chế độ quản trị ---------- */
@@ -215,6 +228,11 @@ const CFG = {
     { k: 'route_id', l: 'Tuyến', t: 'select', src: 'routes', show: 'code' }, { k: 'departure', l: 'Giờ xuất bến', t: 'time' },
     { k: 'bus_id', l: 'Xe', t: 'select', src: 'buses', show: 'plate', opt: 1 },
     { k: 'direction', l: 'Hướng', t: 'select', list: DIR }, { k: 'status', l: 'Trạng thái', t: 'select', list: STATUS }] },
+  profiles: { label: 'Người dùng', f: [
+    { k: 'full_name', l: 'Họ tên', t: 'text' }, { k: 'email', l: 'Email', t: 'text', ro: 1 },
+    { k: 'phone', l: 'Điện thoại', t: 'text', opt: 1 }, { k: 'license_no', l: 'Số GPLX', t: 'text', opt: 1 },
+    { k: 'role', l: 'Vai trò', t: 'select', list: { customer: 'Khách hàng', driver: 'Tài xế' } },
+    { k: 'bus_id', l: 'Xe được gán', t: 'select', src: 'buses', show: 'plate', opt: 1 }] },
   buses: { label: 'Xe', f: [
     { k: 'plate', l: 'Biển số', t: 'text' }, { k: 'capacity', l: 'Sức chứa', t: 'number' },
     { k: 'status', l: 'Tình trạng', t: 'select', list: { active: 'Hoạt động', maintenance: 'Bảo dưỡng', retired: 'Ngừng' } }] }
@@ -226,6 +244,7 @@ function renderAdmin() {
   const c = CFG[S.tab];
   $('#tabs').innerHTML = Object.entries(CFG).map(([k, v]) => `<button data-t="${k}" class="${k === S.tab ? 'on' : ''}">${v.label}</button>`).join('');
   $('#atitle').textContent = 'Quản lý ' + c.label.toLowerCase();
+  $('#addBtn').hidden = S.tab === 'profiles';
   let rows = [...S[S.tab]];
   if (S.tab === 'stops') rows.sort((a, b) => a.route_id - b.route_id || a.seq - b.seq);
   $('#atable').innerHTML = `<table class="rtable"><thead><tr>${c.f.map(f => `<th>${f.l}</th>`).join('')}<th></th></tr></thead><tbody>` +
@@ -237,6 +256,7 @@ function renderAdmin() {
 function openForm(row) {
   const c = CFG[S.tab], d = $('#dlg');
   d.innerHTML = `<form method="dialog" id="frm"><h3>${row ? 'Sửa' : 'Thêm'} ${c.label.toLowerCase()}</h3>` + c.f.map(f => {
+    if (f.ro) return '';
     const v = row ? row[f.k] : (f.t === 'check' ? true : '');
     if (f.t === 'check') return `<div class="f chk"><label><input type="checkbox" name="${f.k}" ${v ? 'checked' : ''}>${f.l}</label></div>`;
     if (f.t === 'select') {
@@ -248,14 +268,17 @@ function openForm(row) {
   d.showModal();
   $('#cancel').onclick = () => d.close();
   $('#frm').onsubmit = async e => { e.preventDefault(); await save(row); };
+  if (S.tab === 'stops') initPick();
 }
 async function save(row) {
   const c = CFG[S.tab], fd = new FormData($('#frm')), o = {};
   for (const f of c.f) {
+    if (f.ro) continue;
     const v = fd.get(f.k);
     o[f.k] = f.t === 'check' ? fd.has(f.k) : (v === '' || v === null) ? null : f.t === 'number' || f.k.endsWith('_id') ? +v : v;
   }
   const other = S[S.tab].filter(x => !row || x.id !== row.id);
+  if (o.phone && !PHONE.test(o.phone)) return toast('Số điện thoại không hợp lệ.', true);
   if (S.tab === 'routes' && o.last_trip <= o.first_trip) return toast('Chuyến cuối phải sau chuyến đầu.', true);
   if (S.tab === 'trips' && o.bus_id && other.some(t => t.bus_id === o.bus_id && t5(t.departure) === o.departure)) return toast('Xe này đã có chuyến xuất bến cùng giờ.', true);
   try {
@@ -288,31 +311,126 @@ async function move(id, dlt) {
 
 /* ---------- Đăng nhập ---------- */
 function renderAuth() {
+  const h = location.hash, admin = isAdmin();
   $('#auth').innerHTML = S.user
-    ? `${isAdmin() ? '<button class="btn" id="toggle">' + (location.hash === '#admin' ? 'Xem công khai' : 'Quản trị') + '</button> ' : ''}<button class="btn" id="out">Đăng xuất</button>`
-    : '<button class="btn" id="in">Quản trị viên</button>';
-  const v = S.user && isAdmin() && location.hash === '#admin';
-  $('#pub').hidden = v; $('#adm').hidden = !v;
+    ? `<span class="muted" style="margin-right:8px">${esc(S.me?.full_name || S.user.email)}</span><button class="btn" data-go="#me">Tài khoản</button> ${admin ? '<button class="btn" data-go="#admin">Quản trị</button> ' : ''}<button class="btn" id="out">Đăng xuất</button>`
+    : '<button class="btn" id="in">Đăng nhập / Đăng ký</button>';
+  const v = !S.user ? 'pub' : h === '#admin' && admin ? 'adm' : h === '#me' ? 'me' : 'pub';
+  $('#pub').hidden = v !== 'pub'; $('#adm').hidden = v !== 'adm'; $('#me').hidden = v !== 'me';
 }
-function openLogin() {
+function openLogin(signup) {
   const d = $('#dlg');
-  d.innerHTML = `<form id="lf"><h3>Đăng nhập quản trị</h3>
+  d.innerHTML = `<form id="lf"><h3>${signup ? 'Tạo tài khoản' : 'Đăng nhập'}</h3>
+    ${signup ? `<div class="f"><label>Họ và tên</label><input type="text" name="n" required maxlength="80" autocomplete="name"></div>
+    <div class="f"><label>Bạn là</label><select name="r"><option value="customer">Khách hàng</option><option value="driver">Tài xế</option></select></div>` : ''}
     <div class="f"><label>Email</label><input type="email" name="e" required autocomplete="username"></div>
-    <div class="f"><label>Mật khẩu</label><input type="password" name="p" required autocomplete="current-password"></div>
-    <div class="acts"><button type="button" class="btn" id="cancel">Huỷ</button><button class="btn pri">Đăng nhập</button></div></form>`;
-  d.showModal(); $('#cancel').onclick = () => d.close();
+    <div class="f"><label>Mật khẩu${signup ? ' (tối thiểu 8 ký tự)' : ''}</label><input type="password" name="p" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}"></div>
+    <div class="acts"><button type="button" class="btn" id="sw">${signup ? 'Đã có tài khoản' : 'Tạo tài khoản'}</button><button class="btn pri">${signup ? 'Đăng ký' : 'Đăng nhập'}</button></div></form>`;
+  if (!d.open) d.showModal();
+  $('#sw').onclick = () => openLogin(!signup);
   $('#lf').onsubmit = async e => {
     e.preventDefault(); const f = new FormData(e.target);
-    const { data, error } = await sb.auth.signInWithPassword({ email: f.get('e'), password: f.get('p') });
-    if (error) return toast('Đăng nhập thất bại: sai email hoặc mật khẩu.', true);
-    d.close();
-    if (data.user?.app_metadata?.role !== 'admin') toast('Tài khoản này chưa có quyền quản trị, chỉ xem được dữ liệu.', true);
-    else location.hash = '#admin';
+    if (signup) {
+      const { data, error } = await sb.auth.signUp({ email: f.get('e'), password: f.get('p'),
+        options: { data: { full_name: f.get('n').trim(), role: f.get('r') }, emailRedirectTo: location.href.split('#')[0] } });
+      if (error) return toast('Đăng ký thất bại: ' + error.message, true);
+      d.close();
+      if (!data.session) return toast('Đã gửi email xác nhận. Mở email rồi đăng nhập lại.');
+      toast('Tạo tài khoản thành công.'); location.hash = '#me';
+    } else {
+      const { data, error } = await sb.auth.signInWithPassword({ email: f.get('e'), password: f.get('p') });
+      if (error) return toast('Đăng nhập thất bại: sai email hoặc mật khẩu.', true);
+      d.close(); location.hash = data.user?.app_metadata?.role === 'admin' ? '#admin' : '#me';
+    }
   };
 }
 
+/* ---------- Trang khách hàng / tài xế ---------- */
+function renderMe() {
+  const el = $('#me'), m = S.me, drv = m?.role === 'driver';
+  if (!m) { el.innerHTML = '<p class="muted">Đang tải hồ sơ…</p>'; return; }
+  const trips = S.trips.filter(t => t.bus_id && t.bus_id === m.bus_id).sort((a, b) => toMin(a.departure) - toMin(b.departure));
+  const bus = S.buses.find(b => b.id === m.bus_id);
+  el.innerHTML = `<section class="panel" style="max-width:560px"><h3>${drv ? 'Trang tài xế' : 'Trang khách hàng'}</h3>
+    <p class="muted" style="margin-bottom:12px">${esc(S.user.email)}</p>
+    <form id="pf"><div class="f"><label>Họ và tên</label><input type="text" name="full_name" value="${esc(m.full_name)}" required maxlength="80"></div>
+    <div class="f"><label>Số điện thoại</label><input type="text" name="phone" value="${esc(m.phone)}" inputmode="tel" placeholder="0901234567"></div>
+    <div class="f"><label>Địa chỉ</label><input type="text" name="address" value="${esc(m.address)}" maxlength="200"></div>
+    ${drv ? `<div class="f"><label>Số giấy phép lái xe</label><input type="text" name="license_no" value="${esc(m.license_no)}" maxlength="30"></div>` : ''}
+    <div class="acts"><button class="btn pri">Lưu thông tin</button></div></form></section>
+    ${drv ? `<section class="panel" style="margin-top:16px"><h3>Chuyến của tôi${bus ? ' · xe ' + esc(bus.plate) : ''}</h3>
+    ${!m.bus_id ? '<p class="muted">Bạn chưa được gán xe. Liên hệ quản trị viên để được gán xe và xem chuyến.</p>'
+      : !trips.length ? '<p class="muted">Xe này chưa có chuyến nào.</p>'
+      : '<div class="scroll"><table class="rtable"><thead><tr><th>Giờ</th><th>Tuyến</th><th>Hướng</th><th>Trạng thái</th></tr></thead><tbody>' + trips.map(t => {
+        const r = S.routes.find(x => x.id === t.route_id);
+        return `<tr><td data-l="Giờ"><b>${t5(t.departure)}</b></td><td data-l="Tuyến">${esc(r?.code)}</td><td data-l="Hướng">${DIR[t.direction]}</td>
+        <td data-l="Trạng thái"><select data-trip="${t.id}" aria-label="Trạng thái chuyến ${t5(t.departure)}">${Object.entries(STATUS).map(([k, l]) => `<option value="${k}" ${k === t.status ? 'selected' : ''}>${l}</option>`).join('')}</select></td></tr>`;
+      }).join('') + '</tbody></table></div>'}</section>` : ''}`;
+}
+$('#me').onsubmit = async e => {
+  e.preventDefault(); const f = new FormData(e.target), o = {};
+  for (const [k, v] of f.entries()) o[k] = v.trim() || null;
+  if (!o.full_name) return toast('Vui lòng nhập họ và tên.', true);
+  if (o.phone && !PHONE.test(o.phone)) return toast('Số điện thoại không hợp lệ (8–15 chữ số).', true);
+  const { error } = await sb.from('profiles').update(o).eq('id', S.user.id);
+  error ? toast('Lưu thất bại: ' + error.message, true) : (toast('Đã lưu thông tin.'), load());
+};
+$('#me').onchange = async e => {
+  const t = e.target; if (!t.dataset.trip) return;
+  const { data, error } = await sb.from('trips').update({ status: t.value }).eq('id', +t.dataset.trip).select();
+  if (error || !data?.length) toast('Không cập nhật được trạng thái chuyến này.', true); else toast('Đã cập nhật trạng thái.');
+  load();
+};
+
+/* ---------- Bản đồ (Leaflet + OpenStreetMap, đường đi theo OSRM) ---------- */
+let map = null, MK = {}, tok = 0; const RC = {};
+const TILE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', HCM = [10.7769, 106.7009];
+const pin = t => L.divIcon({ className: '', html: `<div class="pin">${t}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+function drawMap(st) {
+  if (map) { map.remove(); map = null; } MK = {};
+  const el = $('#map'); if (!el) return;
+  if (typeof L === 'undefined') { el.textContent = 'Không tải được thư viện bản đồ.'; return; }
+  const my = ++tok; map = L.map(el, { scrollWheelZoom: false });
+  L.tileLayer(TILE, { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+  const pts = st.filter(s => s.lat != null && s.lng != null);
+  if (!pts.length) { map.setView(HCM, 12); return; }
+  const ll = pts.map(s => [s.lat, s.lng]);
+  const line = L.polyline(ll, { color: '#1b8a5a', weight: 4, dashArray: '6 8' }).addTo(map);
+  pts.forEach(s => MK[s.id] = L.marker([s.lat, s.lng], { icon: pin(s.seq) }).bindPopup(esc(s.name)).addTo(map));
+  map.fitBounds(ll, { padding: [24, 24] });
+  if (pts.length > 1) roadPath(ll).then(g => { if (my === tok) line.setLatLngs(g).setStyle({ dashArray: null, weight: 5 }); }).catch(() => {});
+}
+async function roadPath(ll) {
+  const key = ll.join(';'); if (RC[key]) return RC[key];
+  const u = 'https://router.project-osrm.org/route/v1/driving/' + ll.map(p => p[1] + ',' + p[0]).join(';') + '?overview=full&geometries=geojson';
+  const j = await (await fetch(u)).json(); if (j.code !== 'Ok') throw 0;
+  return RC[key] = j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+}
+function initPick() {
+  if (typeof L === 'undefined') return;
+  $('#frm .acts').insertAdjacentHTML('beforebegin', '<p class="muted" style="font-size:13px;margin-bottom:4px">Bấm vào bản đồ để chọn vị trí điểm dừng.</p><div id="pick"></div>');
+  const la = $('[name=lat]'), ln = $('[name=lng]'), has = la.value && ln.value;
+  const m = L.map('pick').setView(has ? [+la.value, +ln.value] : HCM, has ? 16 : 12);
+  L.tileLayer(TILE, { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(m);
+  let mk = has ? L.marker([+la.value, +ln.value], { icon: pin('•') }).addTo(m) : null;
+  m.on('click', e => {
+    la.value = e.latlng.lat.toFixed(6); ln.value = e.latlng.lng.toFixed(6);
+    mk ? mk.setLatLng(e.latlng) : mk = L.marker(e.latlng, { icon: pin('•') }).addTo(m);
+  });
+  setTimeout(() => m.invalidateSize(), 60);
+}
+$('#detail').onclick = e => {
+  const li = e.target.closest('[data-sid]'), m = li && MK[li.dataset.sid];
+  if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); }
+};
+
 /* ---------- Sự kiện ---------- */
-function render() { renderAuth(); renderBoard(); renderList(); renderDetail(); if (!$('#adm').hidden) renderAdmin(); }
+function render() {
+  renderAuth();
+  if (!$('#pub').hidden) { renderBoard(); renderList(); renderDetail(); }
+  if (!$('#adm').hidden) renderAdmin();
+  if (!$('#me').hidden) renderMe();
+}
 $('#q').oninput = e => { S.q = e.target.value; renderList(); };
 $('#dir').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.dir = b.dataset.d; [...$('#dir').children].forEach(x => x.classList.toggle('on', x === b)); renderList(); renderDetail(); };
 $('#rlist').onclick = e => { const b = e.target.closest('.ritem'); if (b) { S.sel = +b.dataset.id; renderList(); renderDetail(); } };
@@ -326,20 +444,19 @@ $('#atable').onclick = e => {
   else if (t.dataset.mv) move(+t.dataset.id, +t.dataset.mv);
 };
 $('#auth').onclick = async e => {
-  const id = e.target.id;
-  if (id === 'in') ok ? openLogin() : toast('Chưa cấu hình Supabase.', true);
-  if (id === 'out') { await sb.auth.signOut(); location.hash = ''; }
-  if (id === 'toggle') location.hash = location.hash === '#admin' ? '' : '#admin';
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.go) location.hash = b.dataset.go;
+  if (b.id === 'in') ok ? openLogin(false) : toast('Chưa cấu hình Supabase.', true);
+  if (b.id === 'out') { await sb.auth.signOut(); location.hash = ''; }
 };
+$('.brand').onclick = () => { location.hash = ''; render(); };
 addEventListener('hashchange', render);
 setInterval(() => { if (!$('#pub').hidden) renderBoard(); }, 30000);
 
 if (ok) {
-  sb.auth.getSession().then(({ data }) => { S.user = data.session?.user ?? null; render(); });
-  sb.auth.onAuthStateChange((_, s) => { S.user = s?.user ?? null; render(); });
+  sb.auth.onAuthStateChange((_, ses) => { S.user = ses?.user ?? null; if (!S.user) S.me = null; setTimeout(load, 0); });
   sb.channel('trips-live').on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, load).subscribe();
-}
-load();
+} else load();
 </script>
 </body>
 </html>
